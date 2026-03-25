@@ -132,6 +132,13 @@ def signals_cmd(since: str | None, min_score: float) -> None:
     click.echo(print_signals(signals))
 
 
+@cli.command("insider-analysis")
+def insider_analysis_cmd() -> None:
+    """Classify insider trades as BUY/SELL/EXERCISE/ALLOCATION."""
+    from obs_news_reaction.analysis.insider import print_insider_analysis
+    click.echo(print_insider_analysis())
+
+
 @cli.command("backtest")
 def backtest_cmd() -> None:
     """Run all backtesting strategies and compare results."""
