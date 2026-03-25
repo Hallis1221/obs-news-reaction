@@ -112,6 +112,13 @@ def study_cmd() -> None:
     click.echo(print_study(results))
 
 
+@cli.command("backtest")
+def backtest_cmd() -> None:
+    """Run all backtesting strategies and compare results."""
+    from obs_news_reaction.analysis.backtest import run_all_strategies
+    click.echo(run_all_strategies())
+
+
 @cli.command()
 @click.option("--ticker", default=None, help="Filter by ticker")
 @click.option("--window", default=None, help="Filter by window name")
