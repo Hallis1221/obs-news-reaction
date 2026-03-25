@@ -170,6 +170,79 @@ def strategy_buy_insider_trades(hold_days: int = 1) -> StrategyResult:
     return strategy_buy_on_announcement(hold_days=hold_days, categories=insider_cats)
 
 
+def strategy_insider_buys_only(hold_days: int = 1) -> StrategyResult:
+    """Backtest: only go long when PDMR body text confirms a genuine BUY.
+
+    Uses title-based classification (fast, no network) to filter.
+    Skips sells, exercises, allocations, and unclassified.
+    """
+    from obs_news_reaction.analysis.insider import classify_insider_trade, InsiderAction
+
+    conn = get_connection()
+    try:
+        anns = conn.execute(
+            """SELECT * FROM announcements
+               WHERE category LIKE '%MANDATORY NOTIFICATION%'
+               ORDER BY published_at""",
+        ).fetchall()
+
+        trades = []
+        for ann in anns:
+            # Classify using title keywords
+            ic = classify_insider_trade(ann["ticker"], ann["title"])
+            if ic.action != InsiderAction.BUY:
+                continue  # skip sells, exercises, allocations, unknown
+
+            ticker = ann["ticker"]
+            ol_ticker = ticker + ".OL" if not ticker.endswith(".OL") else ticker
+            ann_date = ann["published_at"][:10]
+
+            bars = _get_daily_bars(conn, ol_ticker)
+            if len(bars) < 2:
+                continue
+
+            date_idx = {b["timestamp"][:10]: i for i, b in enumerate(bars)}
+
+            entry_idx = None
+            dt = datetime.fromisoformat(ann_date)
+            for offset in range(-1, 4):
+                candidate = (dt + timedelta(days=offset)).strftime("%Y-%m-%d")
+                if candidate in date_idx:
+                    entry_idx = date_idx[candidate]
+                    break
+
+            if entry_idx is None:
+                continue
+
+            exit_idx = min(entry_idx + hold_days, len(bars) - 1)
+            if exit_idx <= entry_idx:
+                exit_idx = entry_idx
+
+            entry_price = bars[entry_idx]["open"]
+            exit_price = bars[exit_idx]["close"]
+            if entry_price <= 0:
+                continue
+
+            gross_ret = (exit_price / entry_price - 1) * 100
+            net_ret = gross_ret - COST_PCT
+
+            trades.append(Trade(
+                ticker=ticker,
+                entry_date=bars[entry_idx]["timestamp"][:10],
+                exit_date=bars[exit_idx]["timestamp"][:10],
+                entry_price=entry_price,
+                exit_price=exit_price,
+                gross_return_pct=gross_ret,
+                net_return_pct=net_ret,
+                category=ann["category"],
+                hold_days=hold_days,
+            ))
+
+        return _compile_results(f"Insider BUYS only (hold={hold_days}d)", trades)
+    finally:
+        conn.close()
+
+
 def strategy_buy_inside_info(hold_days: int = 1) -> StrategyResult:
     """Backtest: buy on inside information disclosures."""
     return strategy_buy_on_announcement(
@@ -347,6 +420,7 @@ def run_all_strategies() -> str:
         ("All announcements, 1-day hold", lambda: strategy_buy_on_announcement(hold_days=1)),
         ("All announcements, 3-day hold", lambda: strategy_buy_on_announcement(hold_days=3)),
         ("Insider trades only, 1-day hold", lambda: strategy_buy_insider_trades(hold_days=1)),
+        ("Insider BUYS only, 1-day hold", lambda: strategy_insider_buys_only(hold_days=1)),
         ("Insider trades only, 3-day hold", lambda: strategy_buy_insider_trades(hold_days=3)),
         ("Inside information, 1-day hold", lambda: strategy_buy_inside_info(hold_days=1)),
         ("Gap fade (buy dips > 2%)", lambda: strategy_gap_fade(threshold_pct=2.0)),
