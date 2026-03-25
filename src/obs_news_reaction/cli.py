@@ -122,6 +122,16 @@ def study_cmd() -> None:
     click.echo(print_study(results))
 
 
+@cli.command("signals")
+@click.option("--since", default=None, help="Check signals since (ISO date)")
+@click.option("--min-score", default=1.0, help="Minimum signal score")
+def signals_cmd(since: str | None, min_score: float) -> None:
+    """Scan announcements for actionable trading signals."""
+    from obs_news_reaction.signals import scan_for_signals, print_signals
+    signals = scan_for_signals(since=since, min_score=min_score)
+    click.echo(print_signals(signals))
+
+
 @cli.command("backtest")
 def backtest_cmd() -> None:
     """Run all backtesting strategies and compare results."""
