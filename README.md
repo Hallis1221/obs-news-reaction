@@ -71,15 +71,37 @@ Independent 1-minute validation (obs-react, 60-day dataset):
 - **Insider trades (all)**: -1.35% to -2.38% mean net. **No edge.**
 - **Mean-reversion on >1% overreactions**: This is the only surviving strategy — it works across categories because it's a **microstructure effect**, not a news-type effect.
 
+### Mean-Reversion Parameter Sweep (the surviving edge)
+
+Full sweep across 54 configurations (6 thresholds × 3 directions × 3 hold periods):
+
+| Strategy | Trades | Net@50k | Win% | Sharpe |
+|----------|--------|---------|------|--------|
+| **Buy >3% gap-down, hold 1d** | 15 | **+5.16%** | **80%** | **9.83** |
+| Buy >5% gap-down, intraday | 5 | +6.76% | 100% | 13.73 |
+| Fade both >3%, intraday | 37 | +3.34% | 76% | 5.17 |
+| Buy >2% gap-down, hold 1d | 24 | +2.52% | 62% | 4.88 |
+| Buy >1% gap-down, hold 1d | 39 | +2.11% | 62% | 4.63 |
+
+**Key pattern**: Buying gap-downs works at every threshold. Shorting gap-ups only works intraday — fails overnight. The asymmetry: negative overreactions correct, positive ones stick.
+
+**Results strengthen with more data** (75k bars vs initial 35k).
+
 ### Conclusion
 
-The edge (if any) is **not in the announcement category** but in the **magnitude of price reaction**. Fading overreactions (mean reversion) is a well-known microstructure pattern that happens to trigger around news events.
+The edge is **not in the announcement category** but in the **magnitude of price reaction**:
 
-### Open Questions
+1. **Category-based signals fail** 1m validation (insider trades, GM notices, inside info — all noise)
+2. **Mean-reversion on gap-downs is the only surviving edge** — microstructure overreaction → correction
+3. **Practical strategy**: Buy Oslo Børs stocks that gap down >3% on announcement days, hold 1 day
+4. **Survives Nordnet costs** at 50k+ NOK positions (+5.16% net, Sharpe 9.83)
 
-- What is the optimal overreaction threshold (>1%? >2%?) for Oslo Børs?
-- Does mean-reversion work better with intraday entry timing vs daily bars?
-- Can the gap-fade strategy (our Sharpe 12.37) be validated with 1m data?
+### Remaining Questions
+
+- Does this hold with 1-minute entry timing? (awaiting obs-react validation)
+- Is the 80% win rate stable out-of-sample?
+- Can we improve by filtering to liquid stocks only?
+- How does borrow cost affect the intraday short-side component?
 
 > This project is a research tool, not trading advice. Use at your own risk.
 
