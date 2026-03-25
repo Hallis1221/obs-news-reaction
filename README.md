@@ -71,21 +71,23 @@ Independent 1-minute validation (obs-react, 60-day dataset):
 - **Insider trades (all)**: -1.35% to -2.38% mean net. **No edge.**
 - **Mean-reversion on >1% overreactions**: This is the only surviving strategy — it works across categories because it's a **microstructure effect**, not a news-type effect.
 
-### Mean-Reversion Parameter Sweep (the surviving edge)
+### Mean-Reversion Parameter Sweep (157k bars, 488 tickers)
 
-Full sweep across 54 configurations (6 thresholds × 3 directions × 3 hold periods):
+Full sweep with liquidity split on 6 months of data:
 
-| Strategy | Trades | Net@50k | Win% | Sharpe |
-|----------|--------|---------|------|--------|
-| **Buy >3% gap-down, hold 1d** | 15 | **+5.16%** | **80%** | **9.83** |
-| Buy >5% gap-down, intraday | 5 | +6.76% | 100% | 13.73 |
-| Fade both >3%, intraday | 37 | +3.34% | 76% | 5.17 |
-| Buy >2% gap-down, hold 1d | 24 | +2.52% | 62% | 4.88 |
-| Buy >1% gap-down, hold 1d | 39 | +2.11% | 62% | 4.63 |
+**Liquid stocks (>500k NOK/day volume) — intraday only:**
 
-**Key pattern**: Buying gap-downs works at every threshold. Shorting gap-ups only works intraday — fails overnight. The asymmetry: negative overreactions correct, positive ones stick.
+| Strategy | Liquid Trades | Net@50k | Win% |
+|----------|--------------|---------|------|
+| **Fade both >5%, intraday** | 23 | **+3.05%** | **70%** |
+| **Fade both >3%, intraday** | 50 | **+2.02%** | **70%** |
+| Fade both >2%, intraday | 83 | +1.31% | 65% |
+| Fade down >3%, intraday | 20 | +1.45% | 70% |
+| Fade down >2%, intraday | 35 | +1.14% | 69% |
 
-**Results strengthen with more data** (75k bars vs initial 35k).
+**Critical finding: intraday works, overnight doesn't.** Every 1-day hold config for liquid dip-buying is flat or negative. The edge is same-day mean-reversion only.
+
+Earlier results (+5.16% at 15 trades) were inflated by small sample. With 3x more data, liquid-stock edge converges to **+1-3% net per trade, 65-70% win rate**.
 
 ### Liquidity Split — Daily Bars vs 1-Minute Validation
 
