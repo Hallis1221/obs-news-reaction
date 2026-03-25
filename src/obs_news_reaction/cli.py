@@ -144,6 +144,14 @@ def signals_cmd(since: str | None, min_score: float, liquid_only: bool) -> None:
     click.echo(print_signals(signals))
 
 
+@cli.command("enriched")
+def enriched_cmd() -> None:
+    """Enriched analysis: subcategorized announcements with 24h price moves."""
+    from obs_news_reaction.analysis.enriched import run_enriched_analysis, print_enriched_analysis
+    results = run_enriched_analysis()
+    click.echo(print_enriched_analysis(results))
+
+
 @cli.command("pdmr-deep")
 @click.option("--limit", default=10, help="Max messages to fetch and parse")
 def pdmr_deep_cmd(limit: int) -> None:
