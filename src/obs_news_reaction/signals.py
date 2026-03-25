@@ -67,13 +67,32 @@ def score_announcement(ann: Announcement) -> Signal:
         action = "NEUTRAL"
         reasoning = f"Category '{matched_cat[:40]}' has low expected return ({score:+.2f}%)"
 
-    # Boost score for insider trades with specific keywords
+    # Refine insider trade signals using BUY/SELL/EXERCISE classification
     title_lower = ann.title.lower()
-    if "insider" in title_lower or "pdmr" in title_lower or "primary insider" in title_lower:
-        if score < 4.0:
+    if ann.category.startswith("MANDATORY NOTIFICATION"):
+        from obs_news_reaction.analysis.insider import classify_insider_trade, InsiderAction
+        ic = classify_insider_trade(ann.ticker, ann.title)
+        if ic.action == InsiderAction.BUY:
+            score = 6.0  # genuine insider buys are the strongest signal
+            action = "BUY"
+            reasoning = f"INSIDER BUY detected ({ic.matched_pattern}) — strongest alpha signal"
+        elif ic.action == InsiderAction.SELL:
+            score = -2.0
+            action = "AVOID"
+            reasoning = f"Insider SELL ({ic.matched_pattern}) — negative signal"
+        elif ic.action == InsiderAction.EXERCISE:
+            score = 2.0  # weaker than genuine buys
+            action = "BUY"
+            reasoning = f"Insider option exercise ({ic.matched_pattern}) — moderate signal"
+        elif ic.action == InsiderAction.ALLOCATION:
+            score = 0.5  # routine
+            action = "NEUTRAL"
+            reasoning = f"Routine share allocation ({ic.matched_pattern}) — weak signal"
+        else:
+            # Unclassified PDMR — use base category score
             score = max(score, 4.0)
             action = "BUY"
-            reasoning = "Insider trade notification detected — historically +4.6% avg"
+            reasoning = "Insider trade (unclassified direction) — historically +4.6% avg"
 
     # Penalty for routine/admin announcements
     if any(kw in title_lower for kw in ["annual report", "årsrapport", "financial calendar",
