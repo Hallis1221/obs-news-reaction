@@ -250,6 +250,144 @@ def strategy_buy_inside_info(hold_days: int = 1) -> StrategyResult:
     )
 
 
+def strategy_short_gm_notices(hold_days: int = 1) -> StrategyResult:
+    """Backtest: short (or avoid) on general meeting notices.
+
+    GM notices have -3.01% mean and 0% win rate in our data.
+    This simulates shorting at open, covering after hold_days.
+    """
+    conn = get_connection()
+    try:
+        anns = conn.execute(
+            "SELECT * FROM announcements ORDER BY published_at"
+        ).fetchall()
+
+        trades = []
+        for ann in anns:
+            title_lower = ann["title"].lower()
+            # Match general meeting notices
+            is_gm = any(kw in title_lower for kw in [
+                "general meeting", "generalforsamling", "agm", "egm",
+                "styrets vedtak", "board of directors' proposal",
+            ])
+            if not is_gm:
+                continue
+
+            ticker = ann["ticker"]
+            ol_ticker = ticker + ".OL" if not ticker.endswith(".OL") else ticker
+            ann_date = ann["published_at"][:10]
+
+            bars = _get_daily_bars(conn, ol_ticker)
+            if len(bars) < 2:
+                continue
+
+            date_idx = {b["timestamp"][:10]: i for i, b in enumerate(bars)}
+            entry_idx = None
+            dt = datetime.fromisoformat(ann_date)
+            for offset in range(-1, 4):
+                candidate = (dt + timedelta(days=offset)).strftime("%Y-%m-%d")
+                if candidate in date_idx:
+                    entry_idx = date_idx[candidate]
+                    break
+
+            if entry_idx is None:
+                continue
+
+            exit_idx = min(entry_idx + hold_days, len(bars) - 1)
+            if exit_idx <= entry_idx:
+                exit_idx = entry_idx
+
+            entry_price = bars[entry_idx]["open"]
+            exit_price = bars[exit_idx]["close"]
+            if entry_price <= 0:
+                continue
+
+            # SHORT: profit when price goes down
+            gross_ret = (entry_price / exit_price - 1) * 100
+            net_ret = gross_ret - COST_PCT
+
+            trades.append(Trade(
+                ticker=ticker,
+                entry_date=bars[entry_idx]["timestamp"][:10],
+                exit_date=bars[exit_idx]["timestamp"][:10],
+                entry_price=entry_price,
+                exit_price=exit_price,
+                gross_return_pct=gross_ret,
+                net_return_pct=net_ret,
+                category="SHORT: GM Notice",
+                hold_days=hold_days,
+            ))
+
+        return _compile_results(f"Short GM Notices (hold={hold_days}d)", trades)
+    finally:
+        conn.close()
+
+
+def strategy_avoid_inside_info(hold_days: int = 1) -> StrategyResult:
+    """Backtest: short on inside information (private placements, dilution).
+
+    Inside info has -9.54% mean — strong negative signal.
+    """
+    conn = get_connection()
+    try:
+        anns = conn.execute(
+            """SELECT * FROM announcements
+               WHERE category = 'INSIDE INFORMATION'
+               ORDER BY published_at"""
+        ).fetchall()
+
+        trades = []
+        for ann in anns:
+            ticker = ann["ticker"]
+            ol_ticker = ticker + ".OL" if not ticker.endswith(".OL") else ticker
+            ann_date = ann["published_at"][:10]
+
+            bars = _get_daily_bars(conn, ol_ticker)
+            if len(bars) < 2:
+                continue
+
+            date_idx = {b["timestamp"][:10]: i for i, b in enumerate(bars)}
+            entry_idx = None
+            dt = datetime.fromisoformat(ann_date)
+            for offset in range(-1, 4):
+                candidate = (dt + timedelta(days=offset)).strftime("%Y-%m-%d")
+                if candidate in date_idx:
+                    entry_idx = date_idx[candidate]
+                    break
+
+            if entry_idx is None:
+                continue
+
+            exit_idx = min(entry_idx + hold_days, len(bars) - 1)
+            if exit_idx <= entry_idx:
+                exit_idx = entry_idx
+
+            entry_price = bars[entry_idx]["open"]
+            exit_price = bars[exit_idx]["close"]
+            if entry_price <= 0:
+                continue
+
+            # SHORT
+            gross_ret = (entry_price / exit_price - 1) * 100
+            net_ret = gross_ret - COST_PCT
+
+            trades.append(Trade(
+                ticker=ticker,
+                entry_date=bars[entry_idx]["timestamp"][:10],
+                exit_date=bars[exit_idx]["timestamp"][:10],
+                entry_price=entry_price,
+                exit_price=exit_price,
+                gross_return_pct=gross_ret,
+                net_return_pct=net_ret,
+                category="SHORT: Inside Info",
+                hold_days=hold_days,
+            ))
+
+        return _compile_results(f"Short Inside Info (hold={hold_days}d)", trades)
+    finally:
+        conn.close()
+
+
 def strategy_gap_fade(threshold_pct: float = 2.0) -> StrategyResult:
     """Backtest: fade large gaps on announcement days.
 
@@ -423,6 +561,8 @@ def run_all_strategies() -> str:
         ("Insider BUYS only, 1-day hold", lambda: strategy_insider_buys_only(hold_days=1)),
         ("Insider trades only, 3-day hold", lambda: strategy_buy_insider_trades(hold_days=3)),
         ("Inside information, 1-day hold", lambda: strategy_buy_inside_info(hold_days=1)),
+        ("SHORT: GM notices, 1-day", lambda: strategy_short_gm_notices(hold_days=1)),
+        ("SHORT: Inside info, 1-day", lambda: strategy_avoid_inside_info(hold_days=1)),
         ("Gap fade (buy dips > 2%)", lambda: strategy_gap_fade(threshold_pct=2.0)),
     ]
 
