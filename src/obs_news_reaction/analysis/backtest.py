@@ -17,12 +17,33 @@ from obs_news_reaction.db.schema import get_connection
 
 log = logging.getLogger(__name__)
 
-# Oslo Bors costs (conservative estimates)
+# Nordnet pricing (https://www.nordnet.no/kundeservice/prisliste)
+NORDNET_COMMISSION_PCT = 0.049  # 0.049% per trade
+NORDNET_MIN_COMMISSION_NOK = 79  # minimum 79 NOK per trade
 SPREAD_BPS = 30  # 30 bps for mid/small-cap Oslo stocks
-COMMISSION_BPS = 10  # broker commission
 SLIPPAGE_BPS = 10  # market impact
-TOTAL_COST_BPS = SPREAD_BPS + COMMISSION_BPS + SLIPPAGE_BPS  # 50 bps round-trip
-COST_PCT = TOTAL_COST_BPS / 100  # 0.50%
+
+# Position size scenarios for cost modeling
+POSITION_SIZES_NOK = [10_000, 20_000, 50_000, 100_000, 200_000]
+DEFAULT_POSITION_NOK = 50_000
+
+
+def compute_round_trip_cost_pct(position_nok: float) -> float:
+    """Compute round-trip cost as % of position, using Nordnet pricing.
+
+    Each leg: max(0.049% * position, 79 NOK) + spread/2 + slippage/2
+    Round-trip = 2 * leg cost
+    """
+    commission_nok = max(position_nok * NORDNET_COMMISSION_PCT / 100, NORDNET_MIN_COMMISSION_NOK)
+    spread_nok = position_nok * SPREAD_BPS / 10000 / 2  # half spread per leg
+    slippage_nok = position_nok * SLIPPAGE_BPS / 10000 / 2
+    one_way_nok = commission_nok + spread_nok + slippage_nok
+    round_trip_pct = (2 * one_way_nok / position_nok) * 100
+    return round_trip_pct
+
+
+# Default cost for backward compat
+COST_PCT = compute_round_trip_cost_pct(DEFAULT_POSITION_NOK)
 
 
 @dataclass
@@ -336,10 +357,11 @@ def run_all_strategies() -> str:
         lines.append(print_backtest(result))
         lines.append("")
 
-    # Summary comparison
-    lines.append("=" * 60)
-    lines.append("STRATEGY COMPARISON")
-    lines.append("=" * 60)
+    # Summary comparison at default position size
+    lines.append("=" * 70)
+    lines.append(f"STRATEGY COMPARISON (position size: {DEFAULT_POSITION_NOK/1000:.0f}k NOK)")
+    lines.append(f"Round-trip cost: {COST_PCT:.2f}% (Nordnet: {NORDNET_COMMISSION_PCT}% + {NORDNET_MIN_COMMISSION_NOK} NOK min)")
+    lines.append("=" * 70)
     lines.append(f"{'Strategy':45s} {'Trades':>6s} {'Avg Net':>8s} {'Win%':>5s} {'Sharpe':>7s}")
     lines.append("-" * 75)
 
@@ -351,5 +373,40 @@ def run_all_strategies() -> str:
             )
         else:
             lines.append(f"{name:45s}      0     N/A   N/A    N/A")
+
+    # Cost sensitivity analysis
+    lines.append("")
+    lines.append("=" * 70)
+    lines.append("COST SENSITIVITY (Nordnet pricing)")
+    lines.append("Does alpha survive at different position sizes?")
+    lines.append("=" * 70)
+
+    # Cache gross returns
+    strategy_gross = {}
+    for name, fn in strategies[:4]:
+        result = fn()
+        strategy_gross[name] = result.avg_gross_pct if result.trades else None
+
+    header = f"{'Pos (NOK)':>10s} {'RT Cost':>7s} |"
+    for name in list(strategy_gross.keys()):
+        header += f" {name[:15]:>15s}"
+    lines.append(header)
+    lines.append("-" * (20 + 16 * len(strategy_gross)))
+
+    for pos in POSITION_SIZES_NOK:
+        rt_cost = compute_round_trip_cost_pct(pos)
+        line = f"{pos:>10,d} {rt_cost:>6.2f}% |"
+        for name, gross in strategy_gross.items():
+            if gross is not None:
+                net = gross - rt_cost
+                tag = " *" if net > 0 else "  "
+                line += f" {net:>+7.2f}%{tag:>5s}"
+            else:
+                line += f" {'N/A':>13s}"
+        lines.append(line)
+
+    lines.append("")
+    lines.append("* = alpha survives transaction costs")
+    lines.append(f"Nordnet: {NORDNET_COMMISSION_PCT}% commission, min {NORDNET_MIN_COMMISSION_NOK} NOK/trade")
 
     return "\n".join(lines)
