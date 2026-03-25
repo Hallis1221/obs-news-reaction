@@ -125,10 +125,11 @@ def study_cmd() -> None:
 @cli.command("signals")
 @click.option("--since", default=None, help="Check signals since (ISO date)")
 @click.option("--min-score", default=1.0, help="Minimum signal score")
-def signals_cmd(since: str | None, min_score: float) -> None:
+@click.option("--liquid-only", is_flag=True, help="Only show liquid stocks (>500k NOK/day)")
+def signals_cmd(since: str | None, min_score: float, liquid_only: bool) -> None:
     """Scan announcements for actionable trading signals."""
     from obs_news_reaction.signals import scan_for_signals, print_signals
-    signals = scan_for_signals(since=since, min_score=min_score)
+    signals = scan_for_signals(since=since, min_score=min_score, require_liquid=liquid_only)
     click.echo(print_signals(signals))
 
 
