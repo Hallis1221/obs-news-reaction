@@ -155,5 +155,25 @@ def list_meta() -> None:
     ))
 
 
+@cli.command("plot-reaction")
+@click.argument("announcement_id", type=int)
+def plot_reaction_cmd(announcement_id: int) -> None:
+    """Plot price reaction around an announcement."""
+    from obs_news_reaction.viz.charts import plot_reaction
+    path = plot_reaction(announcement_id)
+    click.echo(f"Saved: {path}")
+
+
+@cli.command("plot-summary")
+def plot_summary_cmd() -> None:
+    """Generate all summary charts."""
+    from obs_news_reaction.viz.charts import plot_summary
+    paths = plot_summary()
+    for p in paths:
+        click.echo(f"Saved: {p}")
+    if not paths:
+        click.echo("No plots generated (need event results first)")
+
+
 if __name__ == "__main__":
     cli()
