@@ -87,30 +87,31 @@ Full sweep across 54 configurations (6 thresholds × 3 directions × 3 hold peri
 
 **Results strengthen with more data** (75k bars vs initial 35k).
 
-### Liquidity Trap (critical finding)
+### Liquidity Split — Daily Bars vs 1-Minute Validation
 
-The mean-reversion edge is **entirely in illiquid stocks**:
+Our daily-bar analysis showed edge only in illiquid stocks. **Independent 1m validation (obs-react) shows the opposite**:
 
-| Threshold | Liquid (>500k NOK/day) | Illiquid |
-|-----------|----------------------|----------|
-| >1% dip, 1d | **-0.31%**, 52% win (61 trades) | **+4.03%**, 80% win (25) |
-| >2% dip, 1d | **-0.44%**, 52% win (33 trades) | **+3.02%**, 76% win (21) |
-| >3% dip, 1d | **-0.45%**, 53% win (19 trades) | **+4.78%**, 86% win (14) |
+| Liquidity | Daily bars (ours) | 1-minute data (obs-react) |
+|-----------|------------------|--------------------------|
+| **Liquid (>500k vol)** | -0.45%, 53% win | **+5.76% net, 92% win, 12 trades** |
+| Illiquid (<500k) | +4.78%, 86% win | +1.33% net, 25% net WR |
+| High volume (>1M) | not tested | **+6.76% net, 90% win, 10 trades** |
 
-**Liquid stocks have zero edge.** The alpha exists exactly where you can't trade it efficiently — wide spreads, low volume, high market impact. Our 30bps spread assumption is likely too optimistic for illiquid names.
+**Daily bars produce misleading results for illiquid stocks** — stale/lagged prices inflate apparent returns. The 1m data is ground truth for execution quality.
 
 ### Conclusion
 
-1. **Category-based signals fail** 1m validation (insider trades, GM notices — all noise)
-2. **Mean-reversion exists but only in illiquid stocks** — classic microstructure trap
-3. **Liquid Oslo Børs stocks are efficiently priced** around announcement days
-4. **No practically tradeable edge found** after accounting for realistic liquidity constraints
+1. **Category-based signals fail** — insider trades, GM notices, inside info are all noise
+2. **Mean-reversion on overreactions works in LIQUID stocks** (1m validated: +5.76% net, 92% WR)
+3. **Daily-bar backtests are unreliable for illiquid names** — stale prices create phantom alpha
+4. **The tradeable edge**: fade >1% overreactions in liquid Oslo Børs stocks on announcement days
 
 ### Remaining Questions
 
-- Does this hold with 1-minute entry timing? (awaiting obs-react validation)
-- Is the 80% win rate stable out-of-sample?
-- Can we improve by filtering to liquid stocks only?
+- Exact entry/exit timing with 1m bars (open? first bar? VWAP?)
+- Optimal threshold for liquid stocks (1%? 2%? 3%?)
+- Out-of-sample stability (12 trades is still small)
+- Can this be automated with the real-time monitor?
 - How does borrow cost affect the intraday short-side component?
 
 > This project is a research tool, not trading advice. Use at your own risk.
