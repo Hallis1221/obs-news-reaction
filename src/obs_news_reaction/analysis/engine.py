@@ -182,9 +182,12 @@ def analyze_announcement(announcement: Announcement) -> list[dict]:
     return results
 
 
-def analyze_all(since: str | None = None) -> int:
-    """Analyze all announcements (optionally since a date). Returns count analyzed."""
-    announcements = get_announcements(since=since)
+def analyze_all(
+    since: str | None = None, category: str | None = None,
+    ticker: str | None = None,
+) -> int:
+    """Analyze announcements with optional filters. Returns count analyzed."""
+    announcements = get_announcements(since=since, category=category, ticker=ticker)
     total = 0
     for ann in announcements:
         log.info(f"Analyzing {ann.ticker} [{ann.published_at}]: {ann.title[:50]}")
@@ -193,3 +196,42 @@ def analyze_all(since: str | None = None) -> int:
             total += 1
     log.info(f"Analyzed {total} announcements")
     return total
+
+
+def category_stats(window_name: str = "[-5m,+5m]") -> dict[str, dict]:
+    """Compute aggregate stats per announcement category for a given window.
+
+    Returns {category: {count, mean_ar, median_ar, mean_reaction_s, ...}}.
+    """
+    from obs_news_reaction.db.schema import get_connection
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """SELECT a.category, er.abnormal_return, er.reaction_time_seconds,
+                      er.data_quality
+               FROM event_results er
+               JOIN announcements a ON a.id = er.announcement_id
+               WHERE er.window_name = ?""",
+            (window_name,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    from collections import defaultdict
+    by_cat: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        by_cat[row["category"]].append(dict(row))
+
+    stats = {}
+    for cat, items in sorted(by_cat.items()):
+        ars = [i["abnormal_return"] for i in items if i["abnormal_return"] is not None]
+        rts = [i["reaction_time_seconds"] for i in items if i["reaction_time_seconds"] is not None]
+        stats[cat] = {
+            "count": len(items),
+            "mean_ar": float(np.mean(ars)) if ars else None,
+            "median_ar": float(np.median(ars)) if ars else None,
+            "std_ar": float(np.std(ars)) if ars else None,
+            "mean_reaction_s": float(np.mean(rts)) if rts else None,
+            "median_reaction_s": float(np.median(rts)) if rts else None,
+        }
+    return stats

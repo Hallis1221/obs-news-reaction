@@ -71,11 +71,37 @@ def backfill_benchmark() -> None:
 
 @cli.command()
 @click.option("--since", default=None, help="Analyze announcements since (ISO date)")
-def analyze(since: str | None) -> None:
+@click.option("--category", default=None, help="Filter by category (e.g. INSIDER, FINANCIAL)")
+@click.option("--ticker", default=None, help="Filter by ticker")
+def analyze(since: str | None, category: str | None, ticker: str | None) -> None:
     """Run event study analysis on announcements."""
     from obs_news_reaction.analysis.engine import analyze_all
-    n = analyze_all(since=since)
+    n = analyze_all(since=since, category=category, ticker=ticker)
     click.echo(f"Analyzed {n} announcements")
+
+
+@cli.command("category-stats")
+@click.option("--window", default="[-5m,+5m]", help="Event window to summarize")
+def category_stats_cmd(window: str) -> None:
+    """Show aggregate stats per announcement category."""
+    from obs_news_reaction.analysis.engine import category_stats
+    stats = category_stats(window_name=window)
+    if not stats:
+        click.echo("No category stats (run analyze first)")
+        return
+    rows = []
+    for cat, s in stats.items():
+        rows.append([
+            cat, s["count"],
+            f"{s['mean_ar']:.4f}" if s["mean_ar"] is not None else "N/A",
+            f"{s['median_ar']:.4f}" if s["median_ar"] is not None else "N/A",
+            f"{s['mean_reaction_s']:.0f}s" if s["mean_reaction_s"] is not None else "N/A",
+        ])
+    click.echo(tabulate(
+        rows,
+        headers=["Category", "Count", "Mean AR", "Median AR", "Mean React."],
+        tablefmt="simple",
+    ))
 
 
 @cli.command()
