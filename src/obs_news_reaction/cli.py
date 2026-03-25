@@ -144,6 +144,13 @@ def signals_cmd(since: str | None, min_score: float, liquid_only: bool) -> None:
     click.echo(print_signals(signals))
 
 
+@cli.command("sweep")
+def sweep_cmd() -> None:
+    """Run mean-reversion parameter sweep across thresholds and directions."""
+    from obs_news_reaction.analysis.mean_reversion import run_parameter_sweep
+    click.echo(run_parameter_sweep())
+
+
 @cli.command("enriched")
 def enriched_cmd() -> None:
     """Enriched analysis: subcategorized announcements with 24h price moves."""
