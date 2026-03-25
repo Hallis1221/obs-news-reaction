@@ -29,11 +29,27 @@ by 2 outlier trades. Key issues:
 - Insider trade notifications are NOT a reliable signal without parsing the full message body
 - The gap-fade strategy (buying large dips) showed promise but had only 3-4 trades
 
+### Buy/Sell Split (from message body parsing)
+
+Parsing the full PDMR message bodies to separate genuine buys from sells shows a clear difference:
+
+| Action | N | Mean 24h Move | Worst | Who |
+|--------|---|--------------|-------|-----|
+| **Insider BUYS** | 6 | **+6.72%** | 0.0% (no negatives) | CEOs, CFOs, Chairs |
+| Insider SELLS | 3 | +1.22% | +0.89% | Primary insiders |
+
+Top insider buys:
+- **ACED** +22.0% — CEO bought 440k shares (213k NOK)
+- **AFISH** +10.4% — CEO bought 5.3k shares (168k NOK)
+- **BORR** +6.1% — CFO bought 500k shares ($2.6M USD)
+
+**Caveat**: Only 6 buy trades (daily bars). The independent 60-day 1m validation (which showed negative returns) did NOT filter by buy/sell. Whether buy-only filtering recovers alpha with 1m data remains the open question.
+
 ### Open Questions
 
-- Can parsing PDMR message bodies to isolate genuine **insider buys** (not exercises/sells) recover alpha?
-- Does the signal work on larger-cap, more liquid stocks where costs are lower?
-- Is there alpha in the **speed** of reaction (first 5 minutes) that daily bars can't capture?
+- Does the buy-only signal hold with 1-minute data and precise entry timing?
+- Is the +6.72% mean a small-sample artifact (6 trades) or a real edge?
+- Does trade size (large CEO/CFO purchases) predict stronger moves?
 
 > This project is a research tool, not trading advice. Use at your own risk.
 
