@@ -52,6 +52,16 @@ def poll() -> None:
     poll_loop()
 
 
+@cli.command("backfill-announcements")
+@click.option("--months", default=3, help="Months to go back")
+@click.option("--chunk-days", default=7, help="Days per scrape chunk")
+def backfill_announcements_cmd(months: int, chunk_days: int) -> None:
+    """Backfill historical announcements from NewsWeb."""
+    from obs_news_reaction.news.historical import backfill_announcements
+    n = backfill_announcements(months_back=months, chunk_days=chunk_days)
+    click.echo(f"Backfilled {n} historical announcements")
+
+
 @cli.command()
 @click.argument("ticker")
 def backfill(ticker: str) -> None:
