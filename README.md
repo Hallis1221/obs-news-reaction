@@ -29,27 +29,57 @@ by 2 outlier trades. Key issues:
 - Insider trade notifications are NOT a reliable signal without parsing the full message body
 - The gap-fade strategy (buying large dips) showed promise but had only 3-4 trades
 
-### Buy/Sell Split (from message body parsing)
+### Buy/Sell Split (full body parsing, 66 messages)
 
-Parsing the full PDMR message bodies to separate genuine buys from sells shows a clear difference:
+All 66 PDMR message bodies parsed: **32 BUY, 16 SELL, 18 UNKNOWN**.
 
-| Action | N | Mean 24h Move | Worst | Who |
-|--------|---|--------------|-------|-----|
-| **Insider BUYS** | 6 | **+6.72%** | 0.0% (no negatives) | CEOs, CFOs, Chairs |
-| Insider SELLS | 3 | +1.22% | +0.89% | Primary insiders |
+| Action | N (with price data) | Mean 24h | Median | Win% |
+|--------|-------------------|---------|--------|------|
+| **Insider BUYS** | 11 | **+5.11%** | 0.00% | 45% |
+| Insider SELLS | 8 | +2.02% | +1.43% | 88% |
+| **Spread** | — | **+3.09%** | — | — |
 
-Top insider buys:
-- **ACED** +22.0% — CEO bought 440k shares (213k NOK)
-- **AFISH** +10.4% — CEO bought 5.3k shares (168k NOK)
-- **BORR** +6.1% — CFO bought 500k shares ($2.6M USD)
+**Key insight**: Insider buys are **fat-tailed**, not consistent. Median is 0% but outliers are huge (CODE +23.4%, ACED +22.0%, AFISH +10.4%). Win rate is only 45%.
 
-**Caveat**: Only 6 buy trades (daily bars). The independent 60-day 1m validation (which showed negative returns) did NOT filter by buy/sell. Whether buy-only filtering recovers alpha with 1m data remains the open question.
+### Short-Side Signals (strongest findings)
+
+| Strategy | Trades | Mean Net | Win% | Sharpe |
+|----------|--------|---------|------|--------|
+| **SHORT: Inside Info** | 3 | **+10.80%** | 67% | 8.97 |
+| **SHORT: GM Notices** | 6 | **+4.21%** | 67% | 7.78 |
+| Gap fade (long) | 8 | +5.26% | 75% | 12.37 |
+
+- **Inside Information** (private placements, dilution): stock drops -9.5% avg
+- **General Meeting Notices**: 0% positive rate — always negative (-3.01% mean)
+
+### Enriched Subcategory Analysis (124 announcements)
+
+| Subcategory | N | Mean | Win% |
+|-------------|---|------|------|
+| INSIDER: Unclassified Trade | 13 | +3.70% | 69% |
+| REG: Financial Report | 1 | +10.95% | 100% |
+| PR: Contract Award | 4 | +0.72% | 75% |
+| REG: GM Notice | 6 | **-3.01%** | **0%** |
+| BUYBACK: Share Repurchase | 8 | -0.46% | 38% |
+| EX DATE | 3 | -2.53% | 0% |
+| INSIDE INFORMATION | 3 | **-9.54%** | 33% |
+
+### Validated: No Category-Based Edge (1m data)
+
+Independent 1-minute validation (obs-react, 60-day dataset):
+- **GM Notices**: 20 events → 8 positive, 12 negative, mean +0.08%. **No edge.** Our "always negative" was small-sample bias (6 trades).
+- **Insider trades (all)**: -1.35% to -2.38% mean net. **No edge.**
+- **Mean-reversion on >1% overreactions**: This is the only surviving strategy — it works across categories because it's a **microstructure effect**, not a news-type effect.
+
+### Conclusion
+
+The edge (if any) is **not in the announcement category** but in the **magnitude of price reaction**. Fading overreactions (mean reversion) is a well-known microstructure pattern that happens to trigger around news events.
 
 ### Open Questions
 
-- Does the buy-only signal hold with 1-minute data and precise entry timing?
-- Is the +6.72% mean a small-sample artifact (6 trades) or a real edge?
-- Does trade size (large CEO/CFO purchases) predict stronger moves?
+- What is the optimal overreaction threshold (>1%? >2%?) for Oslo Børs?
+- Does mean-reversion work better with intraday entry timing vs daily bars?
+- Can the gap-fade strategy (our Sharpe 12.37) be validated with 1m data?
 
 > This project is a research tool, not trading advice. Use at your own risk.
 
