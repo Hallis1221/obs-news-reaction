@@ -2,26 +2,40 @@
 
 **Oslo Bors News Reaction Timer** - measures stock price reaction speed to Oslo Stock Exchange announcements and identifies exploitable alpha signals.
 
-## Alpha Findings
+## Findings
 
-Based on backtesting 200+ announcements against daily price data:
+### Current Status: No Confirmed Alpha
 
-| Strategy | Avg Net Return | Win Rate | Sharpe |
-|----------|---------------|----------|--------|
-| All announcements (1d hold) | +0.71% | 43% | 2.32 |
-| **Insider trades only (1d)** | **+4.60%** | 50% | **7.45** |
-| **Gap fade (buy dips >2%)** | **+8.06%** | 67% | **11.61** |
-| Press releases (1d) | +2.69% | 75% | - |
+Independent validation using 60-day 1-minute data (31 insider trades, obs-react project) shows
+**insider trade (PDMR) notifications do NOT generate positive returns** after Nordnet transaction costs:
 
-Key signals by announcement category:
+| Position Size | Mean Net Return | Win Rate |
+|--------------|----------------|----------|
+| 15,000 NOK | -2.38% | 3% |
+| 50,000 NOK | -1.35% | 32% |
 
-- **PDMR (insider trade) notifications**: +4.6% avg net return
-- **Non-regulatory press releases**: +2.7% avg net
-- **Major shareholding changes**: +2.5% avg net
-- **Annual reports**: -0.9% (avoid)
-- **Ex-dividend dates**: -1.4% (avoid)
+Our initial daily-bar backtest (9 trades, Sharpe 6.64) was a **small-sample artifact** dominated
+by 2 outlier trades. Key issues:
 
-> **Note**: Results are from a limited sample. More data accumulation needed for statistical significance.
+1. **Daily bars mask intraday timing** — entry/exit prices are imprecise
+2. **No buy/sell distinction** — going long on insider SELLS destroys returns
+3. **79 NOK minimum commission** (Nordnet) kills alpha on positions under 50k NOK
+4. **Small samples** (9 trades) produce unreliable Sharpe ratios
+
+### What We Learned
+
+- Oslo Børs announcement-day returns are ~1.7% higher than normal days (gross)
+- After realistic Nordnet costs (0.049% + 79 NOK min), this edge disappears for most strategies
+- Insider trade notifications are NOT a reliable signal without parsing the full message body
+- The gap-fade strategy (buying large dips) showed promise but had only 3-4 trades
+
+### Open Questions
+
+- Can parsing PDMR message bodies to isolate genuine **insider buys** (not exercises/sells) recover alpha?
+- Does the signal work on larger-cap, more liquid stocks where costs are lower?
+- Is there alpha in the **speed** of reaction (first 5 minutes) that daily bars can't capture?
+
+> This project is a research tool, not trading advice. Use at your own risk.
 
 ## Quick Start
 
