@@ -144,6 +144,16 @@ def signals_cmd(since: str | None, min_score: float, liquid_only: bool) -> None:
     click.echo(print_signals(signals))
 
 
+@cli.command("pdmr-deep")
+@click.option("--limit", default=10, help="Max messages to fetch and parse")
+def pdmr_deep_cmd(limit: int) -> None:
+    """Deep-parse PDMR message bodies to extract BUY/SELL + amounts."""
+    from obs_news_reaction.news.pdmr_parser import analyze_all_pdmr, print_pdmr_analysis
+    click.echo(f"Fetching and parsing up to {limit} PDMR messages (this takes ~{limit * 4}s)...")
+    txs = analyze_all_pdmr()[:limit] if limit else analyze_all_pdmr()
+    click.echo(print_pdmr_analysis(txs))
+
+
 @cli.command("insider-analysis")
 def insider_analysis_cmd() -> None:
     """Classify insider trades as BUY/SELL/EXERCISE/ALLOCATION."""
