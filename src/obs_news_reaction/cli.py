@@ -104,6 +104,14 @@ def category_stats_cmd(window: str) -> None:
     ))
 
 
+@cli.command("study")
+def study_cmd() -> None:
+    """Run historical reaction study and print findings."""
+    from obs_news_reaction.analysis.historical import run_historical_study, print_study
+    results = run_historical_study()
+    click.echo(print_study(results))
+
+
 @cli.command()
 @click.option("--ticker", default=None, help="Filter by ticker")
 @click.option("--window", default=None, help="Filter by window name")
