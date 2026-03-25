@@ -113,23 +113,43 @@ def analyze_announcement(announcement: Announcement) -> list[dict]:
         win_start = pub_dt + timedelta(minutes=pre_min)
         win_end = pub_dt + timedelta(minutes=post_min)
 
-        # Fetch stock bars for the window
-        stock_bars = get_price_bars(
-            ticker=announcement.ticker + ".OL" if not announcement.ticker.endswith(".OL") else announcement.ticker,
-            interval=interval,
-            start=win_start.isoformat(),
-            end=win_end.isoformat(),
-        )
+        # Fetch stock bars for the window — try best interval, fall back
+        ol_ticker = announcement.ticker + ".OL" if not announcement.ticker.endswith(".OL") else announcement.ticker
+        stock_bars = []
+        used_interval = interval
+        for try_interval in [interval, "5m", "1d"]:
+            stock_bars = get_price_bars(
+                ticker=ol_ticker,
+                interval=try_interval,
+                start=win_start.isoformat(),
+                end=win_end.isoformat(),
+            )
+            if len(stock_bars) >= MIN_BARS_FOR_ANALYSIS:
+                used_interval = try_interval
+                break
 
         if len(stock_bars) < MIN_BARS_FOR_ANALYSIS:
+            # Try wider window for daily bars
+            if interval != "1d":
+                wider_start = win_start - timedelta(days=2)
+                wider_end = win_end + timedelta(days=2)
+                stock_bars = get_price_bars(
+                    ticker=ol_ticker, interval="1d",
+                    start=wider_start.isoformat(), end=wider_end.isoformat(),
+                )
+                used_interval = "1d"
+
+        if len(stock_bars) < 2:
             log.info(f"  {window_name}: insufficient bars ({len(stock_bars)})")
             continue
 
         # Pre-event stats for reaction time
         lookback_start = pub_dt - timedelta(minutes=PRE_EVENT_LOOKBACK_MINUTES)
+        if used_interval == "1d":
+            lookback_start = pub_dt - timedelta(days=30)
         pre_bars = get_price_bars(
             ticker=stock_bars[0].ticker,
-            interval=interval,
+            interval=used_interval,
             start=lookback_start.isoformat(),
             end=pub_dt.isoformat(),
         )

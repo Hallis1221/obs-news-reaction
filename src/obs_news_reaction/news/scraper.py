@@ -176,13 +176,16 @@ def _scrape_via_dom(since: datetime | None, max_pages: int) -> list[dict]:
                 msg = _parse_dom_row(row)
                 if msg:
                     if since and msg.get("published_at"):
-                        dt = datetime.fromisoformat(msg["published_at"])
-                        if dt.tzinfo is None:
-                            dt = dt.replace(tzinfo=timezone.utc)
-                        if dt < since:
-                            announcements.extend(page_msgs)
-                            browser.close()
-                            return announcements
+                        try:
+                            dt = datetime.fromisoformat(msg["published_at"])
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=timezone.utc)
+                            if dt < since:
+                                announcements.extend(page_msgs)
+                                browser.close()
+                                return announcements
+                        except ValueError:
+                            pass  # unparsed date, keep the message
                     page_msgs.append(msg)
             announcements.extend(page_msgs)
             _time.sleep(NEWSWEB_RATE_LIMIT)
@@ -192,52 +195,98 @@ def _scrape_via_dom(since: datetime | None, max_pages: int) -> list[dict]:
 
 def _parse_dom_row(element) -> dict | None:
     try:
-        text = element.inner_text()
-        href = element.get_attribute("href") or ""
-        match = re.search(r"/message/(\d+)", href)
-        message_id = match.group(1) if match else None
-        if not message_id:
-            link = element.query_selector("a[href*='/message/']")
-            if link:
-                href = link.get_attribute("href") or ""
-                match = re.search(r"/message/(\d+)", href)
-                message_id = match.group(1) if match else None
-        if not message_id:
-            return None
-
-        parts = [p.strip() for p in text.split("\n") if p.strip()]
-        ticker = title = category = published_at = ""
-        for part in parts:
-            if re.match(r"\d{4}-\d{2}-\d{2}", part) or re.match(r"\d{2}\.\d{2}\.\d{4}", part):
-                published_at = part
-            elif re.match(r"^[A-Z]{2,10}$", part):
-                ticker = part
-            elif len(part) > 30:
-                title = part
-            elif not category and part.isupper() and len(part) > 3:
-                category = part
-        if not ticker and parts:
-            ticker = parts[0]
-
-        if published_at:
-            for fmt in ("%Y-%m-%d %H:%M", "%d.%m.%Y %H:%M", "%Y-%m-%dT%H:%M:%S"):
-                try:
-                    dt = datetime.strptime(published_at, fmt).replace(tzinfo=OSLO_TZ)
-                    published_at = to_utc(dt).isoformat()
-                    break
-                except ValueError:
-                    continue
-
-        url = f"{NEWSWEB_BASE_URL}/message/{message_id}" if not href.startswith("http") else href
-        return {
-            "message_id": message_id,
-            "ticker": ticker.upper().strip(),
-            "published_at": published_at,
-            "category": category or "UNKNOWN",
-            "title": title or "(no title)",
-            "url": url,
-            "issuer_name": None,
-        }
+        # Try structured table row first (td cells)
+        cells = element.query_selector_all("td")
+        if len(cells) >= 4:
+            return _parse_table_row(cells, element)
+        # Fallback to link-based parsing
+        return _parse_link_row(element)
     except Exception as e:
         log.debug(f"DOM parse failed: {e}")
         return None
+
+
+def _parse_table_row(cells, row_element) -> dict | None:
+    """Parse a structured table row with td[0]=date, td[1]=market, td[2]=ticker, td[3]=title, td[6]=category."""
+    # Extract message_id from link
+    link = row_element.query_selector("a[href*='/message/']")
+    href = link.get_attribute("href") if link else ""
+    match = re.search(r"/message/(\d+)", href or "")
+    message_id = match.group(1) if match else None
+    if not message_id:
+        return None
+
+    # td[0] = date/time, td[1] = market, td[2] = ticker, td[3] = title
+    raw_date = cells[0].inner_text().strip()
+    ticker = cells[2].inner_text().strip().split("\n")[0].strip()
+    title_text = cells[3].inner_text().strip()
+    # Title is duplicated with "W" markers — take first line
+    title = title_text.split("\n")[0].strip()
+
+    # Category from td[6] if available
+    category = "UNKNOWN"
+    if len(cells) >= 7:
+        cat_text = cells[6].inner_text().strip()
+        category = cat_text.split("\n")[0].strip() or "UNKNOWN"
+
+    # Parse date
+    published_at = ""
+    if raw_date:
+        for fmt in ("%d.%m.%Y %H:%M", "%Y-%m-%d %H:%M", "%d.%m.%Y", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(raw_date, fmt).replace(tzinfo=OSLO_TZ)
+                published_at = to_utc(dt).isoformat()
+                break
+            except ValueError:
+                continue
+
+    if not ticker:
+        return None
+
+    url = f"{NEWSWEB_BASE_URL}/message/{message_id}"
+    return {
+        "message_id": message_id,
+        "ticker": ticker.upper().strip(),
+        "published_at": published_at,
+        "category": category,
+        "title": title or "(no title)",
+        "url": url,
+        "issuer_name": None,
+    }
+
+
+def _parse_link_row(element) -> dict | None:
+    """Fallback parser for non-table rows."""
+    href = element.get_attribute("href") or ""
+    match = re.search(r"/message/(\d+)", href)
+    message_id = match.group(1) if match else None
+    if not message_id:
+        link = element.query_selector("a[href*='/message/']")
+        if link:
+            href = link.get_attribute("href") or ""
+            match = re.search(r"/message/(\d+)", href)
+            message_id = match.group(1) if match else None
+    if not message_id:
+        return None
+
+    text = element.inner_text()
+    parts = [p.strip() for p in re.split(r"[\n\t]+", text) if p.strip()]
+    ticker = title = ""
+    for part in parts:
+        if re.match(r"^[A-Z]{2,10}$", part) and not ticker:
+            ticker = part
+        elif len(part) > 20 and not title:
+            title = part
+    if not ticker and parts:
+        ticker = parts[0]
+
+    url = f"{NEWSWEB_BASE_URL}/message/{message_id}" if not href.startswith("http") else href
+    return {
+        "message_id": message_id,
+        "ticker": ticker.upper().strip(),
+        "published_at": "",
+        "category": "UNKNOWN",
+        "title": title or "(no title)",
+        "url": url,
+        "issuer_name": None,
+    }
