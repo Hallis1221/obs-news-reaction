@@ -13,6 +13,7 @@ from obs_news_reaction.config import (
     PRE_EVENT_LOOKBACK_MINUTES,
     REACTION_THRESHOLD_SIGMA,
 )
+from obs_news_reaction.config import BENCHMARK_TICKER, BENCHMARK_FALLBACK
 from obs_news_reaction.db.operations import (
     get_announcements,
     get_price_bars,
@@ -77,6 +78,20 @@ def _assess_quality(n_bars: int, has_benchmark: bool) -> str:
     return "poor"
 
 
+def _fetch_benchmark_bars(
+    interval: str, start: datetime, end: datetime,
+) -> list[PriceBar]:
+    """Fetch benchmark bars, trying OSEBX.OL then OBX.OL."""
+    for ticker in [BENCHMARK_TICKER, BENCHMARK_FALLBACK]:
+        bars = get_price_bars(
+            ticker=ticker, interval=interval,
+            start=start.isoformat(), end=end.isoformat(),
+        )
+        if bars:
+            return bars
+    return []
+
+
 def analyze_announcement(announcement: Announcement) -> list[dict]:
     """Run event study for all windows on a single announcement. Returns results."""
     pub_dt = datetime.fromisoformat(announcement.published_at)
@@ -122,16 +137,25 @@ def analyze_announcement(announcement: Announcement) -> list[dict]:
         pre_mean = float(np.mean(pre_returns)) if pre_returns else 0.0
         pre_std = float(np.std(pre_returns)) if pre_returns else 0.0
 
-        # Abnormal return (no benchmark bars for now — would need separate fetch)
-        ar = compute_abnormal_return(stock_bars, [])
+        # Fetch benchmark bars for the same window
+        benchmark_bars = _fetch_benchmark_bars(interval, win_start, win_end)
+        has_benchmark = len(benchmark_bars) >= 2
+
+        # Abnormal return = stock return - benchmark return
+        ar = compute_abnormal_return(stock_bars, benchmark_bars)
         car = ar  # Single-window CAR equals AR
+
+        # Benchmark return for storage
+        bench_ret = None
+        if has_benchmark:
+            bench_ret = (benchmark_bars[-1].close / benchmark_bars[0].close) - 1.0
 
         # Reaction time
         reaction_s = find_reaction_time(
             stock_bars, pub_dt, pre_mean, pre_std, REACTION_THRESHOLD_SIGMA,
         )
 
-        quality = _assess_quality(len(stock_bars), False)
+        quality = _assess_quality(len(stock_bars), has_benchmark)
 
         insert_event_result(
             announcement_id=announcement.id,
@@ -142,7 +166,7 @@ def analyze_announcement(announcement: Announcement) -> list[dict]:
             reaction_time_seconds=reaction_s,
             pre_event_mean=pre_mean,
             pre_event_std=pre_std,
-            benchmark_return=None,
+            benchmark_return=bench_ret,
             data_quality=quality,
         )
 
