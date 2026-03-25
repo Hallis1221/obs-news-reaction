@@ -18,6 +18,10 @@ from obs_news_reaction.models import Announcement
 
 log = logging.getLogger(__name__)
 
+# Liquidity thresholds
+MIN_AVG_DAILY_VOLUME = 50_000  # minimum 50k shares/day avg
+MIN_AVG_DAILY_VALUE_NOK = 500_000  # minimum 500k NOK/day traded (volume * price)
+
 # Signal scores based on backtest results (avg net return per category)
 CATEGORY_SCORES: dict[str, float] = {
     "MANDATORY NOTIFICATION OF TRADE PRIMARY INSIDERS": 4.60,
@@ -43,6 +47,44 @@ class Signal:
     category_label: str
     action: str  # "BUY", "AVOID", "NEUTRAL"
     reasoning: str
+    liquid: bool = True  # passes liquidity filter
+    avg_daily_value_nok: float | None = None  # estimated daily traded value
+
+
+def _check_liquidity(ticker: str) -> tuple[bool, float | None]:
+    """Check if a ticker has sufficient liquidity for trading.
+
+    Uses recent daily bars to estimate average daily volume * price.
+    Returns (is_liquid, avg_daily_value_nok).
+    """
+    from obs_news_reaction.db.schema import get_connection
+    conn = get_connection()
+    try:
+        ol_ticker = ticker + ".OL" if not ticker.endswith(".OL") else ticker
+        rows = conn.execute(
+            """SELECT close, volume FROM price_bars
+               WHERE ticker = ? AND interval = '1d'
+               ORDER BY timestamp DESC LIMIT 20""",
+            (ol_ticker,),
+        ).fetchall()
+
+        if not rows:
+            # No price data — check stock_meta
+            meta = get_stock_meta(ol_ticker)
+            if meta and meta.avg_daily_volume:
+                return meta.avg_daily_volume >= MIN_AVG_DAILY_VOLUME, None
+            return True, None  # no data, assume liquid (don't penalize)
+
+        # Average daily value = avg(close * volume)
+        values = [r["close"] * r["volume"] for r in rows if r["volume"] > 0]
+        if not values:
+            return True, None
+
+        avg_value = sum(values) / len(values)
+        is_liquid = avg_value >= MIN_AVG_DAILY_VALUE_NOK
+        return is_liquid, avg_value
+    finally:
+        conn.close()
 
 
 def score_announcement(ann: Announcement) -> Signal:
@@ -110,19 +152,33 @@ def score_announcement(ann: Announcement) -> Signal:
     )
 
 
-def scan_for_signals(since: str | None = None, min_score: float = SIGNAL_THRESHOLD) -> list[Signal]:
+def scan_for_signals(
+    since: str | None = None, min_score: float = SIGNAL_THRESHOLD,
+    require_liquid: bool = False,
+) -> list[Signal]:
     """Scan recent announcements and return actionable signals.
 
     Args:
         since: ISO date to filter announcements from
         min_score: Minimum absolute score to include
+        require_liquid: If True, exclude illiquid stocks from BUY signals
     """
     anns = get_announcements(since=since)
     signals = []
+    liquidity_cache: dict[str, tuple[bool, float | None]] = {}
 
     for ann in anns:
         sig = score_announcement(ann)
         if abs(sig.score) >= min_score:
+            # Check liquidity
+            if ann.ticker not in liquidity_cache:
+                liquidity_cache[ann.ticker] = _check_liquidity(ann.ticker)
+            is_liquid, avg_val = liquidity_cache[ann.ticker]
+            sig.liquid = is_liquid
+            sig.avg_daily_value_nok = avg_val
+
+            if require_liquid and not is_liquid and sig.action == "BUY":
+                continue  # skip illiquid BUY signals
             signals.append(sig)
 
     # Sort by score descending (best signals first)
@@ -144,13 +200,27 @@ def print_signals(signals: list[Signal]) -> str:
     buy_signals = [s for s in signals if s.action == "BUY"]
     avoid_signals = [s for s in signals if s.action == "AVOID"]
 
-    if buy_signals:
-        lines.append(f">>> BUY SIGNALS ({len(buy_signals)}) <<<")
+    liquid_buys = [s for s in buy_signals if s.liquid]
+    illiquid_buys = [s for s in buy_signals if not s.liquid]
+
+    if liquid_buys:
+        lines.append(f">>> BUY SIGNALS — LIQUID ({len(liquid_buys)}) <<<")
         lines.append("")
-        for s in buy_signals:
-            lines.append(f"  [{s.score:+.1f}%] {s.announcement.ticker:8s} {s.announcement.published_at[:16]}")
+        for s in liquid_buys:
+            val_str = f" vol={s.avg_daily_value_nok/1e6:.1f}M" if s.avg_daily_value_nok else ""
+            lines.append(f"  [{s.score:+.1f}%] {s.announcement.ticker:8s} {s.announcement.published_at[:16]}{val_str}")
             lines.append(f"         {s.announcement.title[:65]}")
             lines.append(f"         {s.reasoning}")
+            lines.append("")
+
+    if illiquid_buys:
+        lines.append(f">>> BUY SIGNALS — ILLIQUID ({len(illiquid_buys)}) <<<")
+        lines.append("(Caution: low daily volume, high market impact risk)")
+        lines.append("")
+        for s in illiquid_buys:
+            val_str = f" vol={s.avg_daily_value_nok/1e3:.0f}k" if s.avg_daily_value_nok else " vol=N/A"
+            lines.append(f"  [{s.score:+.1f}%] {s.announcement.ticker:8s} {s.announcement.published_at[:16]}{val_str}")
+            lines.append(f"         {s.announcement.title[:65]}")
             lines.append("")
 
     if avoid_signals:
