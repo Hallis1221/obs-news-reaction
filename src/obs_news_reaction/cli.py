@@ -62,6 +62,17 @@ def backfill_announcements_cmd(months: int, chunk_days: int) -> None:
     click.echo(f"Backfilled {n} historical announcements")
 
 
+@cli.command("monitor")
+@click.option("--interval", default=300, help="Poll interval in seconds")
+@click.option("--min-score", default=2.0, help="Minimum signal score to alert")
+@click.option("--webhook", default=None, help="Webhook URL (Slack/Discord)")
+@click.option("--liquid-only", is_flag=True, default=True, help="Only alert on liquid stocks")
+def monitor_cmd(interval: int, min_score: float, webhook: str | None, liquid_only: bool) -> None:
+    """Real-time signal monitor — polls and alerts on high-score signals."""
+    from obs_news_reaction.monitor import monitor_loop
+    monitor_loop(interval=interval, min_score=min_score, webhook_url=webhook, liquid_only=liquid_only)
+
+
 @cli.command()
 @click.argument("ticker")
 def backfill(ticker: str) -> None:
