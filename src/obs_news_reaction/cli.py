@@ -175,5 +175,39 @@ def plot_summary_cmd() -> None:
         click.echo("No plots generated (need event results first)")
 
 
+@cli.command("export-announcements")
+@click.argument("output")
+@click.option("--format", "fmt", type=click.Choice(["csv", "json"]), default="csv")
+@click.option("--ticker", default=None)
+@click.option("--since", default=None)
+def export_announcements_cmd(output: str, fmt: str, ticker: str | None, since: str | None) -> None:
+    """Export announcements to CSV or JSON."""
+    from pathlib import Path
+    from obs_news_reaction.export import export_announcements_csv, export_announcements_json
+    p = Path(output)
+    if fmt == "json":
+        n = export_announcements_json(p, ticker=ticker, since=since)
+    else:
+        n = export_announcements_csv(p, ticker=ticker, since=since)
+    click.echo(f"Exported {n} announcements to {p}")
+
+
+@cli.command("export-results")
+@click.argument("output")
+@click.option("--format", "fmt", type=click.Choice(["csv", "json"]), default="csv")
+@click.option("--ticker", default=None)
+@click.option("--window", default=None)
+def export_results_cmd(output: str, fmt: str, ticker: str | None, window: str | None) -> None:
+    """Export event results to CSV or JSON."""
+    from pathlib import Path
+    from obs_news_reaction.export import export_results_csv, export_results_json
+    p = Path(output)
+    if fmt == "json":
+        n = export_results_json(p, ticker=ticker, window_name=window)
+    else:
+        n = export_results_csv(p, ticker=ticker, window_name=window)
+    click.echo(f"Exported {n} results to {p}")
+
+
 if __name__ == "__main__":
     cli()
