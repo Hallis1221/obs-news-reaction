@@ -175,5 +175,59 @@ def plot_summary_cmd() -> None:
         click.echo("No plots generated (need event results first)")
 
 
+@cli.command()
+@click.option("--pages", "scrape_pages", default=3, help="Max scrape pages")
+@click.option("--skip-plots", is_flag=True, help="Skip plot generation")
+def run(scrape_pages: int, skip_plots: bool) -> None:
+    """Full pipeline: scrape → backfill prices → fetch meta → analyze → plot."""
+    import time as _time
+
+    from obs_news_reaction.news.poller import poll_once
+    from obs_news_reaction.prices.fetcher import (
+        backfill_prices_for_ticker,
+        backfill_benchmark,
+    )
+    from obs_news_reaction.prices.meta import backfill_all_meta
+    from obs_news_reaction.analysis.engine import analyze_all
+    from obs_news_reaction.db.operations import get_announcements
+
+    click.echo("=== Step 1/5: Scraping announcements ===")
+    n_ann = poll_once()
+    click.echo(f"  {n_ann} new announcements")
+
+    click.echo("=== Step 2/5: Backfilling prices ===")
+    anns = get_announcements()
+    tickers = sorted({a.ticker for a in anns})
+    total_bars = 0
+    for ticker in tickers:
+        bars = backfill_prices_for_ticker(ticker)
+        total_bars += bars
+        if bars:
+            click.echo(f"  {ticker}: {bars} bars")
+        _time.sleep(0.5)
+    click.echo(f"  Total: {total_bars} bars across {len(tickers)} tickers")
+
+    click.echo("=== Step 3/5: Backfilling benchmark ===")
+    n_bench = backfill_benchmark()
+    click.echo(f"  {n_bench} benchmark bars")
+
+    click.echo("=== Step 4/5: Fetching metadata ===")
+    n_meta = backfill_all_meta()
+    click.echo(f"  Metadata for {n_meta} tickers")
+
+    click.echo("=== Step 5/5: Running analysis ===")
+    n_analyzed = analyze_all()
+    click.echo(f"  Analyzed {n_analyzed} announcements")
+
+    if not skip_plots:
+        click.echo("=== Generating plots ===")
+        from obs_news_reaction.viz.charts import plot_summary
+        paths = plot_summary()
+        for p in paths:
+            click.echo(f"  Saved: {p}")
+
+    click.echo("=== Pipeline complete ===")
+
+
 if __name__ == "__main__":
     cli()
