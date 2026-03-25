@@ -87,14 +87,24 @@ Full sweep across 54 configurations (6 thresholds × 3 directions × 3 hold peri
 
 **Results strengthen with more data** (75k bars vs initial 35k).
 
+### Liquidity Trap (critical finding)
+
+The mean-reversion edge is **entirely in illiquid stocks**:
+
+| Threshold | Liquid (>500k NOK/day) | Illiquid |
+|-----------|----------------------|----------|
+| >1% dip, 1d | **-0.31%**, 52% win (61 trades) | **+4.03%**, 80% win (25) |
+| >2% dip, 1d | **-0.44%**, 52% win (33 trades) | **+3.02%**, 76% win (21) |
+| >3% dip, 1d | **-0.45%**, 53% win (19 trades) | **+4.78%**, 86% win (14) |
+
+**Liquid stocks have zero edge.** The alpha exists exactly where you can't trade it efficiently — wide spreads, low volume, high market impact. Our 30bps spread assumption is likely too optimistic for illiquid names.
+
 ### Conclusion
 
-The edge is **not in the announcement category** but in the **magnitude of price reaction**:
-
-1. **Category-based signals fail** 1m validation (insider trades, GM notices, inside info — all noise)
-2. **Mean-reversion on gap-downs is the only surviving edge** — microstructure overreaction → correction
-3. **Practical strategy**: Buy Oslo Børs stocks that gap down >3% on announcement days, hold 1 day
-4. **Survives Nordnet costs** at 50k+ NOK positions (+5.16% net, Sharpe 9.83)
+1. **Category-based signals fail** 1m validation (insider trades, GM notices — all noise)
+2. **Mean-reversion exists but only in illiquid stocks** — classic microstructure trap
+3. **Liquid Oslo Børs stocks are efficiently priced** around announcement days
+4. **No practically tradeable edge found** after accounting for realistic liquidity constraints
 
 ### Remaining Questions
 
