@@ -121,5 +121,39 @@ def announcements(ticker: str | None, limit: int) -> None:
     ))
 
 
+@cli.command("fetch-meta")
+@click.argument("ticker", required=False)
+@click.option("--all", "fetch_all", is_flag=True, help="Fetch meta for all known tickers")
+def fetch_meta(ticker: str | None, fetch_all: bool) -> None:
+    """Fetch stock metadata from yfinance."""
+    from obs_news_reaction.prices.meta import fetch_and_store_meta, backfill_all_meta
+    if fetch_all:
+        n = backfill_all_meta()
+        click.echo(f"Fetched metadata for {n} tickers")
+    elif ticker:
+        ok = fetch_and_store_meta(ticker)
+        click.echo(f"{'Success' if ok else 'Failed'}: {ticker}")
+    else:
+        click.echo("Provide a ticker or use --all")
+
+
+@cli.command("list-meta")
+def list_meta() -> None:
+    """List all stored stock metadata."""
+    from obs_news_reaction.db.operations import get_all_stock_meta
+    metas = get_all_stock_meta()
+    if not metas:
+        click.echo("No metadata stored")
+        return
+    rows = []
+    for m in metas:
+        mcap = f"{m.market_cap/1e9:.1f}B" if m.market_cap else "N/A"
+        rows.append([m.ticker, m.company_name[:30], mcap, m.market_cap_bucket or "N/A",
+                      m.sector or "N/A"])
+    click.echo(tabulate(
+        rows, headers=["Ticker", "Company", "MCap", "Bucket", "Sector"], tablefmt="simple",
+    ))
+
+
 if __name__ == "__main__":
     cli()
